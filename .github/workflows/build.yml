@@ -1,0 +1,66 @@
+name: Flutter Build APK
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.4'
+          channel: 'stable'
+
+      - name: Create Flutter scaffold
+        run: |
+          # Save our generated files
+          mkdir -p /tmp/generated_files
+          cp -r lib /tmp/generated_files/ 2>/dev/null || true
+          cp pubspec.yaml /tmp/generated_files/ 2>/dev/null || true
+          cp analysis_options.yaml /tmp/generated_files/ 2>/dev/null || true
+
+          # Get project name from pubspec
+          PROJECT_NAME=$(grep '^name:' pubspec.yaml | awk '{print $2}')
+
+          # Create a proper Flutter project skeleton
+          cd /tmp
+          flutter create --org com.example --project-name "$PROJECT_NAME" flutter_scaffold
+          
+          # Copy scaffold back to workspace (Android, iOS, web, test, etc.)
+          cd $GITHUB_WORKSPACE
+          cp -r /tmp/flutter_scaffold/android ./
+          cp -r /tmp/flutter_scaffold/ios ./ 2>/dev/null || true
+          cp -r /tmp/flutter_scaffold/web ./ 2>/dev/null || true
+          cp -r /tmp/flutter_scaffold/test ./ 2>/dev/null || true
+          
+          # Restore our generated files on top
+          cp -r /tmp/generated_files/lib ./
+          cp /tmp/generated_files/pubspec.yaml ./
+          cp /tmp/generated_files/analysis_options.yaml ./ 2>/dev/null || true
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release --no-tree-shake-icons
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 7
